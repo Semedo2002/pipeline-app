@@ -1,5 +1,4 @@
 classdef PipelineEngine < handle
-
     
     properties
         Fluid          
@@ -17,7 +16,7 @@ classdef PipelineEngine < handle
             obj.Geometry = table([], [], [], 'VariableNames', {'Length', 'ElevationChange', 'MinorLossK'});
         end
         
-        %% ---CONFIG ---
+        %% ---config---
         
         function setFluid(obj, type)
             switch lower(type)
@@ -43,7 +42,6 @@ classdef PipelineEngine < handle
         
         function setPipeStandard(obj, nominal_inch, schedule)
             obj.Pipe.Roughness = 0.000045;
-
             in2m = 0.0254;
             
             switch nominal_inch
@@ -75,39 +73,37 @@ classdef PipelineEngine < handle
             obj.Geometry = [obj.Geometry; newRow];
         end
         
-        %% ---SOLVER---
+        %% ---solver---
         
         function runSimulation(obj)
             Q_vol = obj.TargetFlow / obj.Fluid.Rho;
             velocity = Q_vol / obj.Pipe.Area;
             Re = (obj.Fluid.Rho * velocity * obj.Pipe.ID) / obj.Fluid.Mu;
             
-            % Colebrook
+            % colebrook fric
             f = obj.solveColebrook(Re, obj.Pipe.Roughness, obj.Pipe.ID);
             
             dx = 20;
-
             dist = 0;
             elev = 0;
-            head = 0; 
             
             P_min_req = obj.Constraints.MinPressure; 
             head_min_req = P_min_req / (obj.Fluid.Rho * 9.81);
             
-            % Init
+            % intialization
             current_head = 500;
             dist_vec = []; elev_vec = []; head_vec = []; pres_vec = [];
             pump_locs = [];
             
             g = 9.81;
             
-            % marching Algo
+            % forward algo
             for i = 1:height(obj.Geometry)
                 L = obj.Geometry.Length(i);
                 dZ = obj.Geometry.ElevationChange(i);
                 K = obj.Geometry.MinorLossK(i);
+                
                 slope = dZ / L;
-
                 h_minor_per_m = (K * velocity^2 / (2*g)) / L;
                 h_major_per_m = f * (1/obj.Pipe.ID) * (velocity^2 / (2*g));
                 total_loss_m = h_major_per_m + h_minor_per_m;
@@ -118,16 +114,17 @@ classdef PipelineEngine < handle
                 for s = 1:steps
                     dist = dist + step_len;
                     elev = elev + (slope * step_len);
+                    
                     current_head = current_head - (total_loss_m * step_len);
-
                     P_head = current_head - elev;
                     
-                    % --- OPTIMIZATION TRIGGER ---
+                    % --- optimization ---
                     if P_head < head_min_req
                         boost = 150; 
                         current_head = current_head + boost;
                         pump_locs = [pump_locs; dist, elev, boost];
                     end
+                    
                     dist_vec(end+1) = dist;
                     elev_vec(end+1) = elev;
                     head_vec(end+1) = current_head;
@@ -136,7 +133,13 @@ classdef PipelineEngine < handle
             end
             obj.Results = table(dist_vec', elev_vec', head_vec', pres_vec', ...
                 'VariableNames', {'Distance', 'Elevation', 'HGL', 'Pressure'});
-            obj.PumpsAdded = array2table(pump_locs, 'VariableNames', {'Distance', 'Elevation', 'HeadAdded'});
+            
+            % --- empty puimp?---
+            if isempty(pump_locs)
+                obj.PumpsAdded = table([], [], [], 'VariableNames', {'Distance', 'Elevation', 'HeadAdded'});
+            else
+                obj.PumpsAdded = array2table(pump_locs, 'VariableNames', {'Distance', 'Elevation', 'HeadAdded'});
+            end
             
             fprintf('Simulation Complete. %d Pumps Installed automatically.\n', height(obj.PumpsAdded));
         end
@@ -145,7 +148,7 @@ classdef PipelineEngine < handle
     
     methods (Access = private)
         function f = solveColebrook(~, Re, epsilon, D)
-            % Newton Raphson
+            % raphson
             if Re < 2300; f = 64/Re; return; end
             f = 0.02;
             for k=1:20
