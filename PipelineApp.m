@@ -10,7 +10,7 @@ function PipelineApp()
     % Init Engine
     Engine = PipelineEngine();
     
-    %% FLUID
+    %% fluid
     valid = false;
     while ~valid
         choice = input('\n[1] Select Fluid Service:\n 1. Petrol (Gasoline)\n 2. Diesel\n 3. Light Crude\n > ', 's');
@@ -32,20 +32,20 @@ function PipelineApp()
     Engine.Constraints.MinPressure = 1.5e5; 
     Engine.Constraints.MaxPressure = 60e5;  
     
-    %% PIPE
+    %% pipe
     fprintf('\n[3] Pipe Specification (ASME B36.10M):\n');
     p_size = input('   Nominal Pipe Size (Inches) [6, 10, 20]: ');
     Engine.setPipeStandard(p_size, 40); 
     fprintf('   >> Selected OD: %.4f m, ID: %.4f m\n', Engine.Pipe.OD, Engine.Pipe.ID);
     
-    %% GEOMETRY
+    %% geom
     fprintf('\n[4] Define Pipeline Geometry:\n');
     fprintf('   We will add segments sequentially.\n');
     
     more_segments = true;
     seg_count = 1;
     
-    %Loop
+    %loop
     while more_segments
         fprintf('\n   --- Segment %d ---\n', seg_count);
         L = input('   Length (m): ');
@@ -59,31 +59,37 @@ function PipelineApp()
         seg_count = seg_count + 1;
     end
     
-    %% SOLVE
+    %% solution
     fprintf('\n[5] Running Computational Fluid Dynamics Solver...\n');
     pause(1); % Simulation feel
     Engine.runSimulation();
     
-    % --- PLOTTING ---
+    % --- Plots ---
     Results = Engine.Results;
     Pumps = Engine.PumpsAdded;
     
     figure('Color', 'w', 'Name', 'Professional Design Report', 'Units','normalized','Position',[0.1 0.1 0.8 0.8]);
-
+    
+    % hydrulic gradient
     subplot(2,1,1); hold on; grid on;
-    area(Results.Distance/1000, Results.Elevation, 'FaceColor', [0.8 0.8 0.8]);
-    plot(Results.Distance/1000, Results.HGL, 'b-', 'LineWidth', 2);
-
+    area(Results.Distance/1000, Results.Elevation, 'FaceColor', [0.8 0.8 0.8], 'DisplayName', 'Terrain');
+    plot(Results.Distance/1000, Results.HGL, 'b-', 'LineWidth', 2, 'DisplayName', 'Hydraulic Grade Line');
+    
     if ~isempty(Pumps)
-        plot(Pumps.Distance/1000, Pumps.Elevation, 'rp', 'MarkerSize', 15, 'MarkerFaceColor','r');
-        for k=1:height(Pumps)
-            text(Pumps.Distance(k)/1000, Pumps.Elevation(k)+20, sprintf('PUMP STATION %d', k), 'Color','r','FontWeight','bold');
+        plot(Pumps.Distance/1000, Pumps.Elevation, 'rp', 'MarkerSize', 10, 'MarkerFaceColor','r', 'DisplayName', 'Pump Station');
+        % Label pumps if count is low
+        if height(Pumps) < 15
+            text(Pumps.Distance/1000, Pumps.Elevation+20, string(1:height(Pumps))', 'Color','r','FontWeight','bold');
+        else
+            text(Results.Distance(end)/1000, max(Results.HGL), sprintf(' TOTAL PUMPS: %d', height(Pumps)), 'Color','r');
         end
     end
+    
     ylabel('Head / Elevation (m)');
     title(['Hydraulic Profile: ', Engine.Fluid.Name]);
-    legend('Terrain', 'Hydraulic Grade Line', 'Pump Station');
-
+    legend('show', 'Location', 'best');
+    
+    % Subplot 2: Pressure
     subplot(2,1,2); hold on; grid on;
     pres_bar = Results.Pressure / 1e5;
     plot(Results.Distance/1000, pres_bar, 'r-', 'LineWidth', 1.5);
@@ -93,4 +99,3 @@ function PipelineApp()
     title('Internal Pressure Profile');
     
     fprintf('\nDONE. Graphical Report Generated.\n');
-end
